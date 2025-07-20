@@ -10,28 +10,29 @@ def load_binance_data():
     url = "https://api.binance.com/api/v3/ticker/24hr"
     response = requests.get(url)
     data = response.json()
-    df = pd.DataFrame(data)
-    df = df[df['symbol'].str.endswith('USDT')]
-    df['priceChangePercent'] = df['priceChangePercent'].astype(float)
-    df['lastPrice'] = df['lastPrice'].astype(float)
-    df['volume'] = df['volume'].astype(float)
-    return df[['symbol', 'lastPrice', 'priceChangePercent', 'volume']].sort_values(by='volume', ascending=False)
 
+    if isinstance(data, list):
+        df = pd.DataFrame(data)
+        df = df[df['symbol'].str.endswith('USDT')]
+        df['priceChangePercent'] = df['priceChangePercent'].astype(float)
+        df['lastPrice'] = df['lastPrice'].astype(float)
+        df = df.sort_values(by='priceChangePercent', ascending=False)
+        return df[['symbol', 'lastPrice', 'priceChangePercent']]
+    else:
+        st.error("❌ Failed to fetch data from Binance API.")
+        st.stop()
+
+# Load data
 df = load_binance_data()
 
-st.sidebar.header("🔍 Filters")
-min_volume = st.sidebar.slider("Minimum Volume", 0.0, 1000000000.0, 10000000.0, step=1000000.0)
-min_change = st.sidebar.slider("Minimum % Change (24h)", -50.0, 50.0, -5.0, step=0.5)
-max_change = st.sidebar.slider("Maximum % Change (24h)", -50.0, 50.0, 50.0, step=0.5)
-search = st.sidebar.text_input("Search Pair (e.g., BTC)")
+# Dropdown to select a coin
+coin = st.selectbox("Select a Coin:", df['symbol'].tolist())
 
-filtered_df = df[
-    (df['volume'] >= min_volume) &
-    (df['priceChangePercent'] >= min_change) &
-    (df['priceChangePercent'] <= max_change)
-]
+# Show selected coin data
+selected = df[df['symbol'] == coin]
+st.metric(label=f"📈 {coin} Price", value=selected['lastPrice'].values[0])
+st.metric(label="24h Change (%)", value=f"{selected['priceChangePercent'].values[0]:.2f}%")
 
-if search:
-    filtered_df = filtered_df[filtered_df['symbol'].str.contains(search.upper())]
-
-st.dataframe(filtered_df.reset_index(drop=True), use_container_width=True)
+# Optional: show full table
+with st.expander("View All USDT Pairs"):
+    st.dataframe(df.reset_index(drop=True))
