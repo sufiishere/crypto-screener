@@ -5,11 +5,17 @@ import pandas as pd
 st.set_page_config(page_title="Crypto Screener", layout="wide")
 st.title("📊 Real-Time Crypto Screener (Binance - USDT Pairs)")
 
+# Fetch Binance Data Safely
 @st.cache_data(ttl=60)
 def load_binance_data():
-    url = "https://api.binance.com/api/v3/ticker/24hr"
-    response = requests.get(url)
-    data = response.json()
+    url = "https://api.binance.com/api/v3/ticker/24hr"  # use HTTPS
+    try:
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()  # raise error for bad status
+        data = response.json()
+    except Exception as e:
+        st.error("❌ Error fetching data from Binance API.")
+        st.stop()
 
     if isinstance(data, list):
         df = pd.DataFrame(data)
@@ -19,20 +25,20 @@ def load_binance_data():
         df = df.sort_values(by='priceChangePercent', ascending=False)
         return df[['symbol', 'lastPrice', 'priceChangePercent']]
     else:
-        st.error("❌ Failed to fetch data from Binance API.")
+        st.error("❌ Unexpected data format received from Binance.")
         st.stop()
 
 # Load data
 df = load_binance_data()
 
-# Dropdown to select a coin
-coin = st.selectbox("Select a Coin:", df['symbol'].tolist())
+# Coin dropdown
+coin = st.selectbox("🔍 Select a Coin", df['symbol'].tolist())
 
-# Show selected coin data
+# Show selected coin metrics
 selected = df[df['symbol'] == coin]
-st.metric(label=f"📈 {coin} Price", value=selected['lastPrice'].values[0])
+st.metric(label=f"{coin} Price", value=selected['lastPrice'].values[0])
 st.metric(label="24h Change (%)", value=f"{selected['priceChangePercent'].values[0]:.2f}%")
 
-# Optional: show full table
-with st.expander("View All USDT Pairs"):
+# Show full table (expandable)
+with st.expander("📋 View All USDT Pairs"):
     st.dataframe(df.reset_index(drop=True))
