@@ -2,46 +2,51 @@ import streamlit as st
 import requests
 import pandas as pd
 
-st.set_page_config(page_title="Crypto Screener", layout="wide")
-st.title("📊 Real-Time Crypto Screener (Binance - USDT Pairs)")
+st.set_page_config(page_title="Crypto Screener (Coingecko)", layout="wide")
+st.title("📊 Real-Time Crypto Screener (Top 250 Coins)")
 
-# Load Binance data with error handling
 @st.cache_data(ttl=60)
-def load_binance_data():
-    url = "https://api.binance.com/api/v3/ticker/24hr"
+def load_data():
+    url = "https://api.coingecko.com/api/v3/coins/markets"
+    params = {
+        "vs_currency": "usd",
+        "order": "market_cap_desc",
+        "per_page": 250,
+        "page": 1,
+        "sparkline": False
+    }
+
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, params=params, timeout=10)
         response.raise_for_status()
         data = response.json()
     except Exception as e:
-        st.error(f"❌ Error fetching data from Binance: {e}")
+        st.error(f"❌ Failed to fetch data from Coingecko: {e}")
         st.stop()
 
-    if not isinstance(data, list):
-        st.error("❌ Unexpected data format received from Binance.")
-        st.stop()
+    df = pd.DataFrame(data)
+    df = df[["id", "symbol", "name", "current_price", "price_change_percentage_24h", "market_cap"]]
+    df.rename(columns={
+        "id": "ID",
+        "symbol": "Symbol",
+        "name": "Name",
+        "current_price": "Price (USD)",
+        "price_change_percentage_24h": "24h Change (%)",
+        "market_cap": "Market Cap"
+    }, inplace=True)
 
-    try:
-        df = pd.DataFrame(data)
-        df = df[df['symbol'].str.endswith('USDT')]
-        df['priceChangePercent'] = pd.to_numeric(df['priceChangePercent'], errors='coerce')
-        df['lastPrice'] = pd.to_numeric(df['lastPrice'], errors='coerce')
-        df = df.sort_values(by='priceChangePercent', ascending=False)
-        return df[['symbol', 'lastPrice', 'priceChangePercent']]
-    except Exception as e:
-        st.error(f"❌ Error processing Binance data: {e}")
-        st.stop()
+    df["24h Change (%)"] = df["24h Change (%)"].round(2)
+    df.sort_values(by="24h Change (%)", ascending=False, inplace=True)
+    return df
 
-# Load data
-df = load_binance_data()
+# Load and display data
+df = load_data()
 
-# UI components
-coin = st.selectbox("🔍 Select a Coin", df['symbol'].tolist())
+coin = st.selectbox("🔍 Select a Coin", df["Name"].tolist())
+selected = df[df["Name"] == coin]
 
-selected = df[df['symbol'] == coin]
-st.metric(label=f"{coin} Price", value=selected['lastPrice'].values[0])
-st.metric(label="24h Change (%)", value=f"{selected['priceChangePercent'].values[0]:.2f}%")
+st.metric(label=f"{selected['Name'].values[0]} Price", value=f"${selected['Price (USD)'].values[0]:,.2f}")
+st.metric(label="24h Change (%)", value=f"{selected['24h Change (%)'].values[0]:.2f}%")
 
-with st.expander("📋 View All USDT Pairs"):
-    st.dataframe(df.reset_index(drop=True))
-
+with st.expander("📋 View Top 250 Coins by Market Cap"):
+    st.dataframe(df.reset_index(drop=True), use_container_width=True)
